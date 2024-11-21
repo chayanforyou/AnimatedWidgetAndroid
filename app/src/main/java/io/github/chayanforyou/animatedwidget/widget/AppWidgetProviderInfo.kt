@@ -1,4 +1,4 @@
-package io.github.chayanforyou.animatedwidget
+package io.github.chayanforyou.animatedwidget.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -7,7 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
-import io.github.chayanforyou.animatedwidget.AppWidgetReceiver
+import io.github.chayanforyou.animatedwidget.R
 
 class AppWidgetProviderInfo : AppWidgetProvider() {
 

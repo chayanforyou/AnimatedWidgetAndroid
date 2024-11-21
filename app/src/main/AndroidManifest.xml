@@ -21,7 +21,7 @@
         </activity>
 
         <receiver
-            android:name=".AppWidgetProviderInfo"
+            android:name=".widget.AppWidgetProviderInfo"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -32,7 +32,7 @@
                 android:resource="@xml/app_widget_info" />
         </receiver>
         <receiver
-            android:name=".AppWidgetReceiver"
+            android:name=".widget.AppWidgetReceiver"
             android:exported="false"
             android:stopWithTask="false">
             <intent-filter>

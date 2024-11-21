@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">AnimatedWidget</string>
     <string name="widget_icon">Widget Icon</string>
+    <string name="demo_text">Widget Animation Demo</string>
 </resources>
