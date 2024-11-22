@@ -4,20 +4,32 @@
     android:id="@+id/widget"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
     android:gravity="bottom"
     android:orientation="vertical"
     tools:ignore="UseCompoundDrawables">
 
-    <ImageView
-        android:id="@+id/icon"
+    <FrameLayout
         android:layout_width="@dimen/_41sdp"
         android:layout_height="@dimen/_41sdp"
-        android:layout_gravity="center"
-        android:contentDescription="@string/widget_icon"
-        android:src="@drawable/ic_widget" />
+        android:layout_gravity="center">
+
+        <ImageView
+            android:id="@+id/widget_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/ic_widget" />
+
+        <ImageView
+            android:id="@+id/progress"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
 
     <TextView
-        android:id="@+id/label"
+        android:id="@+id/progress_pct"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
@@ -29,8 +41,8 @@
         android:shadowDy="1.5"
         android:shadowRadius="3"
         android:singleLine="true"
-        android:text="75%"
         android:textColor="@color/white"
-        android:textSize="@dimen/_10ssp" />
+        android:textSize="@dimen/_10ssp"
+        tools:text="56%" />
 
 </LinearLayout>

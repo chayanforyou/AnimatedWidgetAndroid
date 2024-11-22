@@ -195,10 +195,10 @@ class GifDecoder {
      * @param inputStream containing GIF file.
      * @return read status code (0 = no errors)
      */
-    fun read(inputStream: InputStream?, contentLength: Int): Int {
+    fun read(inputStream: InputStream?): Int {
         if (inputStream != null) {
             try {
-                val capacity = if (contentLength > 0) contentLength + 4096 else 4096
+                val capacity = inputStream.available()
                 val buffer = ByteArrayOutputStream(capacity)
                 var nRead: Int
                 val data = ByteArray(16384)
