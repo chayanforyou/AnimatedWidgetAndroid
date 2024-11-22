@@ -4,11 +4,8 @@
     android:id="@+id/widget"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:clickable="true"
-    android:focusable="true"
     android:gravity="bottom"
-    android:orientation="vertical"
-    tools:ignore="UseCompoundDrawables">
+    android:orientation="vertical">
 
     <FrameLayout
         android:layout_width="@dimen/_41sdp"

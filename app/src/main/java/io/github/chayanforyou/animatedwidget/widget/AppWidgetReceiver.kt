@@ -23,22 +23,23 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
         const val NEW_WIDGET = "io.github.chayanforyou.animatedwidget.NEW_WIDGET"
         const val WIDGET_CLICK = "io.github.chayanforyou.animatedwidget.WIDGET_CLICK"
 
-        @Volatile
-        var isAnimating: Boolean = false
-        private var gifDecoder: GifDecoder? = null
+        private val animationStates = mutableMapOf<Int, Boolean>()
     }
 
     private var context: Context? = null
     private lateinit var appWidgetManager: AppWidgetManager
+    private val gifDecoder: GifDecoder by lazy {
+        GifDecoder()
+    }
 
+    private var animationThread: Thread? = null
     private var tmpBitmap: Bitmap? = null
     private var progressBitmap: Bitmap? = null
     private var appWidgetId: Int = 0
-    private var animationThread: Thread? = null
     private val myHandler = Handler(Looper.getMainLooper())
 
     private val canvasSize = 400
-    private val canvasPadding = 20
+    private val canvasPadding = 20f
     private var progress = 0
     private val maxProgress = 56   // 56%
 
@@ -69,45 +70,42 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
         appWidgetManager = AppWidgetManager.getInstance(context)
         appWidgetId = intent?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0) ?: return
 
-        if (intent.action == NEW_WIDGET) {
-            progress = maxProgress
-            progressBitmap = getProgressBitmap(progress)
-            myHandler.post(updateProgress)
-        }
-
-        if (intent.action == WIDGET_CLICK) {
-            gifDecoder = gifDecoder ?: GifDecoder().apply {
-                read(context?.resources?.openRawResource(R.raw.ic_widget))
+        when (intent.action) {
+            NEW_WIDGET -> {
+                animationStates[appWidgetId] = false
+                progress = maxProgress
+                progressBitmap = getProgressBitmap(progress)
+                myHandler.post(updateProgress)
             }
 
-            synchronized(AppWidgetReceiver::class.java) {
+            WIDGET_CLICK -> {
+                val isAnimating = animationStates[appWidgetId] ?: false
                 if (!isAnimating) {
-                    isAnimating = true
+                    animationStates[appWidgetId] = true
                     startAnimationThread()
                 }
             }
         }
     }
 
-    private fun canStart(): Boolean {
-        return isAnimating && gifDecoder != null && animationThread == null
-    }
-
     private fun startAnimationThread() {
-        if (canStart()) {
+        if (animationThread == null) {
             animationThread = Thread(this)
             animationThread!!.start()
         }
     }
 
     override fun run() {
-        for (pos in 0 until gifDecoder!!.frameCount) {
-            gifDecoder!!.advance()
+        // Read GIF image from stream
+        gifDecoder.read(context?.resources?.openRawResource(R.raw.ic_widget))
+
+        for (pos in 0 until gifDecoder.frameCount) {
+            gifDecoder.advance()
 
             var frameDecodeTime: Long = 0
             try {
                 val before = System.nanoTime()
-                tmpBitmap = gifDecoder!!.nextFrame
+                tmpBitmap = gifDecoder.nextFrame
                 frameDecodeTime = (System.nanoTime() - before) / 1000000
                 myHandler.post(updateWidget)
             } catch (e: ArrayIndexOutOfBoundsException) {
@@ -117,36 +115,43 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
             }
 
             try {
-                var delay = gifDecoder!!.nextDelay.toLong()
+                var delay = gifDecoder.nextDelay.toLong()
                 delay -= frameDecodeTime
-                if (delay > 0) {
-                    Thread.sleep(delay)
-                }
+                if (delay > 0) Thread.sleep(delay)
             } catch (e: InterruptedException) {
                 // suppress exception
             }
         }
 
-        // Increment the progress and update bitmap in the RemoteViews
+        try {
+            Thread.sleep(800L)
+        } catch (e: InterruptedException) {
+            // suppress exception
+        }
+
+        // Increment the progress and update he RemoteViews
         while (progress < maxProgress) {
             progress += 1
             progressBitmap = getProgressBitmap(progress)
             myHandler.post(updateProgress)
         }
 
-        isAnimating = false
         animationThread = null
+        animationStates[appWidgetId] = false
     }
 
     private fun getProgressBitmap(progress: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(canvasSize, canvasSize, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.TRANSPARENT)
         val canvas = Canvas(bitmap)
-        val paint = Paint()
-        paint.isAntiAlias = true
+
+        val paint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = canvasPadding
+        }
 
         paint.color = Color.argb(45, 255, 255, 255)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = canvasPadding.toFloat()
         canvas.drawCircle(
             canvasSize / 2f,
             canvasSize / 2f,
@@ -155,8 +160,6 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
         )
 
         paint.color = Color.argb(255, 255, 194, 10)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = canvasPadding.toFloat()
         paint.strokeCap = Paint.Cap.ROUND
         canvas.drawArc(
             RectF(
