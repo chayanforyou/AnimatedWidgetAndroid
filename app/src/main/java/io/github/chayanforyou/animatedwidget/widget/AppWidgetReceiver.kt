@@ -5,48 +5,51 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.RemoteViews
 import io.github.chayanforyou.animatedwidget.R
 import io.github.chayanforyou.animatedwidget.gif.GifDecoder
+import io.github.chayanforyou.animatedwidget.utils.ProgressBitmap
 
 class AppWidgetReceiver : BroadcastReceiver(), Runnable {
 
     companion object {
+        private const val POST_ANIMATION_DELAY = 800L
+        const val ACTION_WIDGET_CLICK = "io.github.chayanforyou.animatedwidget.WIDGET_CLICK"
+
         private val TAG = AppWidgetReceiver::class.java.simpleName
-        const val NEW_WIDGET = "io.github.chayanforyou.animatedwidget.NEW_WIDGET"
-        const val WIDGET_CLICK = "io.github.chayanforyou.animatedwidget.WIDGET_CLICK"
 
         private val animationStates = mutableMapOf<Int, Boolean>()
     }
 
+    // Context and app widget manager
     private var context: Context? = null
     private lateinit var appWidgetManager: AppWidgetManager
-    private val gifDecoder: GifDecoder by lazy {
-        GifDecoder()
-    }
 
+    // GIF decoder to process animations
+    private val gifDecoder: GifDecoder by lazy { GifDecoder() }
+
+    // Variables for tracking animation progress and widget state
+    private var progress: Int = 0
+    private var appWidgetId: Int = 0
     private var animationThread: Thread? = null
+
+    // Bitmap objects for managing widget visuals
     private var tmpBitmap: Bitmap? = null
     private var progressBitmap: Bitmap? = null
-    private var appWidgetId: Int = 0
+
+    // Handler to post UI updates to the main thread
     private val myHandler = Handler(Looper.getMainLooper())
 
-    private val canvasSize = 400
-    private val canvasPadding = 20f
-    private var progress = 0
-    private val maxProgress = 56   // 56%
-
+    /**
+     * Runnable to update the widget image during the animation.
+     */
     private val updateWidget = Runnable {
-        if (tmpBitmap != null && !tmpBitmap!!.isRecycled) {
+        tmpBitmap?.takeIf { !it.isRecycled }?.let {
             val remoteViews = RemoteViews(context?.packageName, R.layout.widget_layout).apply {
-                setImageViewBitmap(R.id.widget_image, tmpBitmap)
+                setImageViewBitmap(R.id.widget_image, it)
                 setImageViewBitmap(R.id.progress, null)
                 setTextViewText(R.id.progress_pct, "0%")
             }
@@ -54,16 +57,22 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
         }
     }
 
-    private val updateProgress: Runnable = Runnable {
-        if (progressBitmap != null && !progressBitmap!!.isRecycled) {
+    /**
+     * Runnable to update the progress bar and percentage text.
+     */
+    private val updateProgress = Runnable {
+        progressBitmap?.takeIf { !it.isRecycled }?.let {
             val views = RemoteViews(context?.packageName, R.layout.widget_layout).apply {
-                setImageViewBitmap(R.id.progress, progressBitmap)
+                setImageViewBitmap(R.id.progress, it)
                 setTextViewText(R.id.progress_pct, "$progress%")
             }
             appWidgetManager.updateAppWidget(appWidgetId, views)
         }
     }
 
+    /**
+     * Handles widget click events and starts animation if not already animating.
+     */
     override fun onReceive(context: Context?, intent: Intent?) {
         this.context = context
 
@@ -71,14 +80,8 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
         appWidgetId = intent?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0) ?: return
 
         when (intent.action) {
-            NEW_WIDGET -> {
-                animationStates[appWidgetId] = false
-                progress = maxProgress
-                progressBitmap = getProgressBitmap(progress)
-                myHandler.post(updateProgress)
-            }
-
-            WIDGET_CLICK -> {
+            ACTION_WIDGET_CLICK -> {
+                // Check if animation is already running
                 val isAnimating = animationStates[appWidgetId] ?: false
                 if (!isAnimating) {
                     animationStates[appWidgetId] = true
@@ -88,92 +91,57 @@ class AppWidgetReceiver : BroadcastReceiver(), Runnable {
         }
     }
 
+    /**
+     * Starts a new thread to handle the animation.
+     */
     private fun startAnimationThread() {
         if (animationThread == null) {
-            animationThread = Thread(this)
-            animationThread!!.start()
+            animationThread = Thread(this).apply { start() }
         }
     }
 
+    /**
+     * Runs the animation logic in a background thread.
+     */
     override fun run() {
-        // Read GIF image from stream
-        gifDecoder.read(context?.resources?.openRawResource(R.raw.ic_widget))
-
-        for (pos in 0 until gifDecoder.frameCount) {
-            gifDecoder.advance()
-
-            var frameDecodeTime: Long = 0
-            try {
-                val before = System.nanoTime()
-                tmpBitmap = gifDecoder.nextFrame
-                frameDecodeTime = (System.nanoTime() - before) / 1000000
-                myHandler.post(updateWidget)
-            } catch (e: ArrayIndexOutOfBoundsException) {
-                Log.w(TAG, e)
-            } catch (e: IllegalArgumentException) {
-                Log.w(TAG, e)
-            }
-
-            try {
-                var delay = gifDecoder.nextDelay.toLong()
-                delay -= frameDecodeTime
-                if (delay > 0) Thread.sleep(delay)
-            } catch (e: InterruptedException) {
-                // suppress exception
-            }
-        }
-
         try {
-            Thread.sleep(800L)
+            // Decode the GIF image
+            gifDecoder.read(context?.resources?.openRawResource(R.raw.ic_widget))
+
+            // Loop through the GIF frames
+            for (frameIndex in 0 until gifDecoder.frameCount) {
+                gifDecoder.advance() // Move to the next frame
+                val startTime = System.nanoTime()
+
+                try {
+                    tmpBitmap = gifDecoder.nextFrame
+                    val decodeTime = (System.nanoTime() - startTime) / 1000000
+                    myHandler.post(updateWidget)
+
+                    // Adjust delay for smooth animation
+                    val delay = gifDecoder.nextDelay.toLong() - decodeTime
+                    if (delay > 0) Thread.sleep(delay)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error during frame processing", e)
+                }
+            }
+
+            // Add post-animation delay
+            Thread.sleep(POST_ANIMATION_DELAY)
+
+            // Increment progress and update the progress bar
+            while (progress < AppWidgetProviderInfo.MAX_PROGRESS) {
+                progress++
+                progressBitmap = ProgressBitmap.create(progress)
+                myHandler.post(updateProgress)
+            }
         } catch (e: InterruptedException) {
-            // suppress exception
+            Log.w(TAG, "Animation interrupted", e)
+        } finally {
+            // Reset animation state
+            animationStates[appWidgetId] = false
+            animationThread = null
         }
-
-        // Increment the progress and update he RemoteViews
-        while (progress < maxProgress) {
-            progress += 1
-            progressBitmap = getProgressBitmap(progress)
-            myHandler.post(updateProgress)
-        }
-
-        animationThread = null
-        animationStates[appWidgetId] = false
-    }
-
-    private fun getProgressBitmap(progress: Int): Bitmap {
-        val bitmap = Bitmap.createBitmap(canvasSize, canvasSize, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.TRANSPARENT)
-        val canvas = Canvas(bitmap)
-
-        val paint = Paint().apply {
-            isAntiAlias = true
-            style = Paint.Style.STROKE
-            strokeWidth = canvasPadding
-        }
-
-        paint.color = Color.argb(45, 255, 255, 255)
-        canvas.drawCircle(
-            canvasSize / 2f,
-            canvasSize / 2f,
-            canvasSize / 2f - canvasPadding / 2f,
-            paint
-        )
-
-        paint.color = Color.argb(255, 255, 194, 10)
-        paint.strokeCap = Paint.Cap.ROUND
-        canvas.drawArc(
-            RectF(
-                canvasPadding / 2f,
-                canvasPadding / 2f,
-                (canvasSize - canvasPadding / 2f),
-                (canvasSize - canvasPadding / 2f)
-            ),
-            -90f,
-            360 * (progress / 100f),
-            false,
-            paint
-        )
-        return bitmap
     }
 }
 
